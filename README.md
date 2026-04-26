@@ -194,9 +194,9 @@ The current V1 supports:
 - offline-to-online parity validation for serving correctness
 - batch scoring through both `POST /predict/batch` and `python3 -m app.cli batch-score`
 
-## Next Steps
+## Future Expansion
 
-Realistic next follow-up work:
+Possible follow-on work outside the current shipped scope:
 
 1. add champion-challenger model comparison and rollback metadata
 2. add shadow validation outputs that compare current and candidate models on the same batch
