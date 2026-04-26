@@ -83,12 +83,16 @@ That produces:
 ### Validate Offline-to-Online Parity
 
 ```bash
+make train
 make validate
 ```
+
+`make validate` checks the already-registered artifact package and compares direct offline probabilities to the probabilities returned by the serving path. It does not retrain the model.
 
 ### Serve the Model
 
 ```bash
+make train
 make serve
 ```
 
