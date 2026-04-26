@@ -53,6 +53,7 @@ def _train_candidate(
     y_test: list[int],
     model_file: Path,
 ) -> dict[str, object]:
+    model_file.parent.mkdir(parents=True, exist_ok=True)
     estimator.fit(x_train, y_train)
     probabilities = estimator.predict_proba(x_test)[:, 1]
     predictions = estimator.predict(x_test)
@@ -85,6 +86,7 @@ def _selection_score(candidate: dict[str, object]) -> tuple[float, float, float]
 
 
 def train_and_register() -> TrainingArtifacts:
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
     rows = generate_rows()
     write_dataset(rows, DATASET_CSV)
     train_rows, test_rows = _split_rows(rows)
