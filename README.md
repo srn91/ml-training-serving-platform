@@ -16,6 +16,19 @@ The V1 implementation is intentionally compact but complete:
 - FastAPI serves predictions from the latest registered model
 - a parity validator compares direct offline probabilities to served probabilities on a holdout slice
 
+## Training, Serving, Validation
+
+This repo is split into three separate code paths so the lifecycle is easy to inspect:
+
+1. `app/dataset.py` generates and reloads the synthetic training data.
+2. `app/training.py` fits the model and writes the registry package.
+3. `app/service.py` loads the saved manifest and serves predictions from the latest artifact.
+4. `app/validation.py` checks that offline probabilities and online probabilities stay aligned.
+5. `app/main.py` exposes the FastAPI surface.
+6. `app/cli.py` provides explicit `train` and `validate` commands.
+
+That separation matters. This is not an "everything in one file" demo; it is a training artifact, a serving layer, and a parity check stitched together with a small, inspectable contract.
+
 ```mermaid
 flowchart LR
     A["Synthetic training dataset"] --> B["Training pipeline"]
@@ -115,6 +128,13 @@ The repo currently verifies:
 - the trained model clears a reasonable local demo quality bar
 - the FastAPI serving surface returns the registered model version and a bounded probability
 - offline direct probabilities match the served probabilities on a holdout sample
+
+The public story should stay precise:
+
+- training and serving are separate code paths
+- the service always loads from the registered artifact package
+- validation compares offline and online probabilities instead of assuming they match
+- the manifest, schema, and metrics files make the artifact bundle self-describing
 
 Expected local validation snapshot:
 
