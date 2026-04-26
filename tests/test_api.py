@@ -26,7 +26,7 @@ def test_predict_endpoint_returns_model_version_and_probability() -> None:
     payload = response.json()
 
     assert response.status_code == 200
-    assert payload["model_version"] in {"model-v1-champion", "model-v1-challenger"}
+    assert payload["model_version"] in {"model-v1-champion", "model-v1-challenger", "model-v1-torch"}
     assert 0.0 <= payload["default_probability"] <= 1.0
 
 
@@ -38,16 +38,19 @@ def test_health_and_model_endpoints_report_registered_version() -> None:
     models_response = client.get("/models")
 
     assert health_response.status_code == 200
-    assert health_response.json()["active_model_role"] in {"champion", "challenger"}
+    assert health_response.json()["active_model_role"] in {"champion", "challenger", "torch"}
+    assert health_response.json()["active_model_framework"] in {"sklearn", "torch"}
     assert model_response.status_code == 200
     assert models_response.status_code == 200
     model_payload = model_response.json()
     assert model_payload["registry_version"] == "model-v1"
-    assert model_payload["active_model_role"] in {"champion", "challenger"}
-    assert model_payload["active_model_version"] in {"model-v1-champion", "model-v1-challenger"}
+    assert model_payload["active_model_role"] in {"champion", "challenger", "torch"}
+    assert model_payload["active_model_framework"] in {"sklearn", "torch"}
+    assert model_payload["active_model_version"] in {"model-v1-champion", "model-v1-challenger", "model-v1-torch"}
     assert "comparison_file" in model_payload
     assert "rollback_file" in model_payload
-    assert set(models_response.json()["available_models"]) == {"model-v1-champion", "model-v1-challenger"}
+    assert set(models_response.json()["available_models"]) == {"model-v1-champion", "model-v1-challenger", "model-v1-torch"}
+    assert models_response.json()["available_models"]["model-v1-torch"]["framework"] == "torch"
 
 
 def test_monitoring_endpoint_returns_drift_and_calibration() -> None:
@@ -56,9 +59,10 @@ def test_monitoring_endpoint_returns_drift_and_calibration() -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["active_model_version"] in {"model-v1-champion", "model-v1-challenger"}
+    assert payload["active_model_version"] in {"model-v1-champion", "model-v1-challenger", "model-v1-torch"}
     assert "credit_score" in payload["feature_drift"]
-    assert set(payload["models"]) == {"model-v1-champion", "model-v1-challenger"}
+    assert set(payload["models"]) == {"model-v1-champion", "model-v1-challenger", "model-v1-torch"}
+    assert payload["models"]["model-v1-torch"]["framework"] == "torch"
 
 
 def test_batch_predict_endpoint_scores_multiple_records() -> None:
@@ -88,7 +92,7 @@ def test_batch_predict_endpoint_scores_multiple_records() -> None:
 
     body = response.json()
     assert response.status_code == 200
-    assert body["model_version"] in {"model-v1-champion", "model-v1-challenger"}
+    assert body["model_version"] in {"model-v1-champion", "model-v1-challenger", "model-v1-torch"}
     assert body["records_scored"] == 2
     assert len(body["predictions"]) == 2
     assert all(0.0 <= row["default_probability"] <= 1.0 for row in body["predictions"])
@@ -109,6 +113,25 @@ def test_predict_can_route_to_specific_registered_version() -> None:
 
     assert response.status_code == 200
     assert response.json()["model_version"] == "model-v1-challenger"
+
+
+def test_predict_can_route_to_registered_torch_version() -> None:
+    client = _client()
+    response = client.post(
+        "/predict?version=model-v1-torch",
+        json={
+            "income_k": 72.0,
+            "debt_to_income": 0.31,
+            "credit_score": 690.0,
+            "tenure_months": 36.0,
+            "late_payments_12m": 1,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["model_version"] == "model-v1-torch"
+    assert 0.0 <= payload["default_probability"] <= 1.0
 
 
 def test_predict_rejects_invalid_payload() -> None:

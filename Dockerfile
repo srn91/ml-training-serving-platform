@@ -1,9 +1,11 @@
-FROM python:3.13-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
 COPY requirements.txt .
-RUN python -m pip install --no-cache-dir -r requirements.txt
+RUN grep -v '^torch' requirements.txt > requirements.docker.txt \
+    && python -m pip install --no-cache-dir -r requirements.docker.txt \
+    && python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.11.0
 
 COPY app ./app
 COPY Makefile .

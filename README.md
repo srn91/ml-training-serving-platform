@@ -1,6 +1,6 @@
 # ml-training-serving-platform
 
-An end-to-end ML lifecycle platform that trains a credit-risk classifier, compares champion and challenger models, registers rollback and monitoring artifacts, serves multi-version predictions through FastAPI, and validates offline-to-online prediction parity before release.
+An end-to-end ML lifecycle platform that trains a credit-risk classifier with both scikit-learn baselines and a compact PyTorch model, registers versioned artifacts, serves multi-version predictions through FastAPI, and validates offline-to-online prediction parity before release.
 
 ## Problem
 
@@ -8,23 +8,23 @@ Many ML demos stop at model accuracy. Real ML engineering work requires reproduc
 
 ## Architecture
 
-The current implementation is intentionally compact but complete:
+This implementation is compact but complete:
 
 - a deterministic synthetic credit-risk dataset is generated locally
-- training fits a deterministic champion/challenger pair on the generated dataset
-- the registry writes active model, champion, challenger, feature schema, metrics, comparison, rollback, calibration, drift-baseline, and manifest artifacts under a versioned artifact directory
+- training fits a deterministic champion/challenger pair plus a PyTorch model on the generated dataset
+- the registry writes active model, champion, challenger, torch, feature schema, metrics, comparison, rollback, calibration, drift-baseline, and manifest artifacts under a versioned artifact directory
 - FastAPI serves predictions from either the active model or an explicitly selected registered version
 - a parity validator compares direct offline probabilities to served probabilities on a holdout slice
 - a monitoring summary reports feature drift and model calibration gaps from the latest registered artifact set
 
-In practice, the repo is split into three lifecycle stages: deterministic training data generation, artifact-backed champion/challenger registration, and serving-time validation that checks the API against the offline benchmark.
+In practice, the repo is split into three lifecycle stages: deterministic training data generation, artifact-backed model registration, and serving-time validation that checks the API against the offline benchmark.
 
 ## Training, Serving, Validation
 
 This repo is split into three separate code paths so the lifecycle is easy to inspect:
 
 1. `app/dataset.py` generates and reloads the synthetic training data.
-2. `app/training.py` fits both candidate models, selects the active model, and writes the comparison and rollback bundle.
+2. `app/training.py` fits the champion/challenger scikit-learn pair and a separately versioned PyTorch model, selects the active model, and writes the comparison and rollback bundle.
 3. `app/service.py` loads the saved manifest and serves predictions from the active artifact or a requested registered version.
 4. `app/monitoring.py` builds drift and calibration summaries from the registered artifact set.
 5. `app/validation.py` checks that offline probabilities and online probabilities stay aligned.
@@ -36,19 +36,20 @@ That separation matters. This is not an "everything in one file" demo; it is a t
 ```mermaid
 flowchart LR
     A["Synthetic training dataset"] --> B["Training pipeline"]
-    B --> C["active_model.joblib"]
-    B --> D["metrics.json"]
-    B --> E["comparison.json"]
-    B --> F["rollback.json"]
-    B --> G["feature_schema.json"]
-    B --> H["calibration.json + drift_baseline.json"]
-    B --> I["manifest.json"]
-    I --> J["FastAPI inference service"]
-    C --> I
-    H --> J
-    A --> K["Offline / online parity validation"]
-    J --> K
-    K --> L["validation summary"]
+    B --> C["active_model.artifact"]
+    B --> D["champion_model.joblib"]
+    B --> E["challenger_model.joblib"]
+    B --> F["torch_model.pt"]
+    B --> G["metrics / comparison / rollback / schema"]
+    B --> H["calibration / drift-baseline / manifest"]
+    C --> I["FastAPI inference service"]
+    D --> I
+    E --> I
+    F --> I
+    H --> I
+    A --> J["Offline / online parity validation"]
+    I --> J
+    J --> K["validation summary"]
 ```
 
 ## Tradeoffs
@@ -57,7 +58,7 @@ This implementation makes three deliberate tradeoffs:
 
 1. The dataset is synthetic so the repo remains runnable without private data or warehouse access.
 2. The registry is filesystem-based instead of MLflow because the goal is lifecycle clarity before distributed platform overhead.
-3. The model is a deterministic tree ensemble rather than a larger boosting stack so the training-serving path stays fast, reproducible, and easy to validate locally.
+3. The repo packages both deterministic tree baselines and a compact PyTorch MLP so the training-serving path covers classical ML and deep-learning inference without adding external infrastructure.
 
 ## Repo Layout
 
@@ -68,6 +69,7 @@ ml-training-serving-platform/
 │   ├── config.py
 │   ├── dataset.py
 │   ├── main.py
+│   ├── torch_model.py
 │   ├── service.py
 │   ├── training.py
 │   └── validation.py
@@ -95,9 +97,10 @@ make train
 That produces:
 
 - `generated/credit_risk_dataset.csv`
-- `artifacts/model-v1/active_model.joblib`
+- `artifacts/model-v1/active_model.artifact`
 - `artifacts/model-v1/champion_model.joblib`
 - `artifacts/model-v1/challenger_model.joblib`
+- `artifacts/model-v1/torch_model.pt`
 - `artifacts/model-v1/metrics.json`
 - `artifacts/model-v1/comparison.json`
 - `artifacts/model-v1/rollback.json`
@@ -136,7 +139,7 @@ Useful endpoints:
 Single-record and batch prediction routes also accept an optional `version` query parameter so you can score against a specific registered model:
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/predict?version=model-v1-challenger" \
+curl -X POST "http://127.0.0.1:8000/predict?version=model-v1-torch" \
   -H "Content-Type: application/json" \
   -d '{"income_k":72.0,"debt_to_income":0.31,"credit_score":690.0,"tenure_months":36.0,"late_payments_12m":1}'
 ```
@@ -187,25 +190,25 @@ These assets package the same FastAPI service and its artifact-backed startup fl
 
 ## Validation
 
-The repo currently verifies:
+The repo verifies:
 
-- the training pipeline writes champion, challenger, comparison, rollback, schema, metrics, and manifest artifacts
+- the training pipeline writes champion, challenger, torch, comparison, rollback, schema, metrics, and manifest artifacts
 - the training pipeline also writes calibration, drift-baseline, and monitoring artifacts
 - the selected active model clears a reasonable local demo quality bar
 - the FastAPI serving surface returns the active model version and a bounded probability
 - the FastAPI serving surface exposes the registered model inventory and monitoring summary
-- single-record and batch inference can route to a specific registered model version
+- single-record and batch inference can route to a specific registered model version, including the registered torch model
 - offline direct probabilities match the served probabilities on a holdout sample
 - batch scoring uses the same registered artifact as the single-record API path
 
-The public story should stay precise:
+The shipped contract is intentionally narrow:
 
 - training and serving are separate code paths
 - the service always loads from the active artifact package
 - validation compares offline and online probabilities instead of assuming they match
 - the manifest, schema, comparison, rollback, and metrics files make the artifact bundle self-describing
 
-Current validation shape:
+Sample validation shape:
 
 - training rows: `1920`
 - test rows: `480`
@@ -220,12 +223,12 @@ Local quality gates:
 - `make validate`
 - `make verify`
 
-## Current Capabilities
+## Capabilities
 
-The current implementation supports:
+This repo supports:
 
 - deterministic training dataset generation
-- scikit-learn champion/challenger training with reproducible model versioning
+- scikit-learn champion/challenger training with reproducible model versioning and a separately versioned PyTorch model
 - artifact registration with metrics, schema, comparison, rollback, calibration, drift-baseline, and manifest metadata
 - FastAPI inference serving from the selected active model or an explicitly requested registered version
 - monitoring summaries that surface feature drift and calibration gaps

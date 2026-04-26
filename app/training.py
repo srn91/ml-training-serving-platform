@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,8 +25,11 @@ from app.config import (
     MONITORING_SUMMARY_FILE,
     ROLLBACK_FILE,
     SCHEMA_FILE,
+    TORCH_MODEL_FILE,
+    TORCH_MODEL_VERSION,
 )
 from app.dataset import FEATURE_NAMES, generate_rows, write_dataset
+from app.torch_model import load_torch_bundle, train_torch_candidate
 
 
 @dataclass(frozen=True)
@@ -46,7 +50,7 @@ def _matrix(rows: list[dict[str, float | int]]) -> tuple[list[list[float]], list
     return features, labels
 
 
-def _train_candidate(
+def _train_sklearn_candidate(
     *,
     role: str,
     model_version: str,
@@ -73,6 +77,7 @@ def _train_candidate(
     joblib.dump(estimator, model_file)
     return {
         "role": role,
+        "framework": "sklearn",
         "model_version": model_version,
         "model_file": str(model_file),
         "metrics": metrics,
@@ -139,6 +144,14 @@ def _feature_baseline(rows: list[dict[str, float | int]]) -> dict[str, object]:
     return baseline
 
 
+def _load_candidate_model(candidate: dict[str, object]):
+    framework = str(candidate["framework"])
+    model_file = Path(str(candidate["model_file"]))
+    if framework == "torch":
+        return load_torch_bundle(model_file)
+    return joblib.load(model_file)
+
+
 def train_and_register() -> TrainingArtifacts:
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     rows = generate_rows()
@@ -147,7 +160,7 @@ def train_and_register() -> TrainingArtifacts:
     x_train, y_train = _matrix(train_rows)
     x_test, y_test = _matrix(test_rows)
 
-    champion = _train_candidate(
+    champion = _train_sklearn_candidate(
         role="champion",
         model_version=f"{MODEL_VERSION}-champion",
         estimator=RandomForestClassifier(
@@ -162,7 +175,7 @@ def train_and_register() -> TrainingArtifacts:
         y_test=y_test,
         model_file=CHAMPION_MODEL_FILE,
     )
-    challenger = _train_candidate(
+    challenger = _train_sklearn_candidate(
         role="challenger",
         model_version=f"{MODEL_VERSION}-challenger",
         estimator=GradientBoostingClassifier(
@@ -177,41 +190,77 @@ def train_and_register() -> TrainingArtifacts:
         y_test=y_test,
         model_file=CHALLENGER_MODEL_FILE,
     )
+    torch_candidate = train_torch_candidate(
+        role="torch",
+        model_version=TORCH_MODEL_VERSION,
+        x_train=x_train,
+        y_train=y_train,
+        x_test=x_test,
+        y_test=y_test,
+        model_file=TORCH_MODEL_FILE,
+    )
 
-    selected = max((champion, challenger), key=_selection_score)
-    alternate = challenger if selected is champion else champion
+    ranked_candidates = sorted((champion, challenger, torch_candidate), key=_selection_score, reverse=True)
+    selected = ranked_candidates[0]
+    alternate = ranked_candidates[1]
     selected_metrics = dict(selected["metrics"])
     selected_metrics["registry_version"] = MODEL_VERSION
     selected_metrics["selected_model_role"] = selected["role"]
     selected_metrics["selected_model_version"] = selected["model_version"]
+    selected_metrics["selected_model_framework"] = selected["framework"]
 
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    joblib.dump(joblib.load(selected["model_file"]), MODEL_FILE)
+    shutil.copyfile(str(selected["model_file"]), MODEL_FILE)
 
-    champion_model = joblib.load(champion["model_file"])
-    challenger_model = joblib.load(challenger["model_file"])
+    champion_model = _load_candidate_model(champion)
+    challenger_model = _load_candidate_model(challenger)
+    torch_model = _load_candidate_model(torch_candidate)
     champion_probs = champion_model.predict_proba(x_test)[:, 1]
     challenger_probs = challenger_model.predict_proba(x_test)[:, 1]
+    torch_probs = torch_model.predict_proba(x_test)[:, 1]
 
     comparison = {
         "registry_version": MODEL_VERSION,
         "champion": champion,
         "challenger": challenger,
+        "torch": torch_candidate,
         "selected_model_role": selected["role"],
         "selected_model_version": selected["model_version"],
+        "selected_model_framework": selected["framework"],
+        "ranked_models": [
+            {
+                "role": candidate["role"],
+                "framework": candidate["framework"],
+                "model_version": candidate["model_version"],
+                "metrics": candidate["metrics"],
+            }
+            for candidate in ranked_candidates
+        ],
         "selection_reason": "higher holdout ROC AUC, then accuracy, then lower brier score",
     }
     COMPARISON_FILE.write_text(json.dumps(comparison, indent=2), encoding="utf-8")
 
     calibration = {
         "registry_version": MODEL_VERSION,
-        "champion": {
-            "model_version": champion["model_version"],
-            **_calibration_summary(champion_probs, y_test),
-        },
-        "challenger": {
-            "model_version": challenger["model_version"],
-            **_calibration_summary(challenger_probs, y_test),
+        "models": {
+            champion["model_version"]: {
+                "role": champion["role"],
+                "framework": champion["framework"],
+                "model_version": champion["model_version"],
+                **_calibration_summary(champion_probs, y_test),
+            },
+            challenger["model_version"]: {
+                "role": challenger["role"],
+                "framework": challenger["framework"],
+                "model_version": challenger["model_version"],
+                **_calibration_summary(challenger_probs, y_test),
+            },
+            torch_candidate["model_version"]: {
+                "role": torch_candidate["role"],
+                "framework": torch_candidate["framework"],
+                "model_version": torch_candidate["model_version"],
+                **_calibration_summary(torch_probs, y_test),
+            },
         },
     }
     CALIBRATION_FILE.write_text(json.dumps(calibration, indent=2), encoding="utf-8")
@@ -227,9 +276,11 @@ def train_and_register() -> TrainingArtifacts:
         "registry_version": MODEL_VERSION,
         "active_model_role": selected["role"],
         "active_model_version": selected["model_version"],
+        "active_model_framework": selected["framework"],
         "active_model_file": str(MODEL_FILE),
         "rollback_model_role": alternate["role"],
         "rollback_model_version": alternate["model_version"],
+        "rollback_model_framework": alternate["framework"],
         "rollback_model_file": str(alternate["model_file"]),
         "reason": "alternate model remains packaged so the selected model can be rolled back without retraining",
     }
@@ -254,6 +305,7 @@ def train_and_register() -> TrainingArtifacts:
                 "registry_version": MODEL_VERSION,
                 "active_model_role": selected["role"],
                 "active_model_version": selected["model_version"],
+                "active_model_framework": selected["framework"],
                 "active_model_file": str(MODEL_FILE),
                 "comparison_file": str(COMPARISON_FILE),
                 "rollback_file": str(ROLLBACK_FILE),
@@ -262,14 +314,22 @@ def train_and_register() -> TrainingArtifacts:
                 "monitoring_summary_file": str(MONITORING_SUMMARY_FILE),
                 "champion": champion,
                 "challenger": challenger,
+                "torch": torch_candidate,
                 "available_models": {
                     champion["model_version"]: {
                         "role": champion["role"],
+                        "framework": champion["framework"],
                         "model_file": str(CHAMPION_MODEL_FILE),
                     },
                     challenger["model_version"]: {
                         "role": challenger["role"],
+                        "framework": challenger["framework"],
                         "model_file": str(CHALLENGER_MODEL_FILE),
+                    },
+                    torch_candidate["model_version"]: {
+                        "role": torch_candidate["role"],
+                        "framework": torch_candidate["framework"],
+                        "model_file": str(TORCH_MODEL_FILE),
                     },
                 },
                 "metrics_file": str(METRICS_FILE),
@@ -285,8 +345,19 @@ def train_and_register() -> TrainingArtifacts:
             "registry_version": MODEL_VERSION,
             "selected_model_role": selected["role"],
             "selected_model_version": selected["model_version"],
+            "selected_model_framework": selected["framework"],
             "champion": champion["metrics"],
             "challenger": challenger["metrics"],
+            "torch": torch_candidate["metrics"],
+            "ranked_models": [
+                {
+                    "role": candidate["role"],
+                    "framework": candidate["framework"],
+                    "model_version": candidate["model_version"],
+                    "metrics": candidate["metrics"],
+                }
+                for candidate in ranked_candidates
+            ],
             "selection_reason": "higher holdout ROC AUC, then accuracy, then lower brier score",
         }
     )

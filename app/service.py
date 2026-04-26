@@ -8,6 +8,7 @@ import joblib
 
 from app.config import MANIFEST_FILE
 from app.dataset import FEATURE_NAMES, read_dataset
+from app.torch_model import load_torch_bundle
 
 
 def ensure_model_ready() -> None:
@@ -27,10 +28,23 @@ def load_manifest() -> dict[str, object]:
 def load_model(model_version: str | None = None):
     manifest = load_manifest()
     if model_version is None:
-        return joblib.load(manifest["active_model_file"])
+        return _load_registered_model(
+            model_file=str(manifest["active_model_file"]),
+            framework=str(manifest["active_model_framework"]),
+        )
     if model_version not in manifest["available_models"]:
         raise KeyError(model_version)
-    return joblib.load(manifest["available_models"][model_version]["model_file"])
+    metadata = manifest["available_models"][model_version]
+    return _load_registered_model(
+        model_file=str(metadata["model_file"]),
+        framework=str(metadata["framework"]),
+    )
+
+
+def _load_registered_model(*, model_file: str, framework: str):
+    if framework == "torch":
+        return load_torch_bundle(Path(model_file))
+    return joblib.load(model_file)
 
 
 def reload_model() -> None:
@@ -43,6 +57,7 @@ def available_models() -> dict[str, object]:
     return {
         "active_model_version": manifest["active_model_version"],
         "active_model_role": manifest["active_model_role"],
+        "active_model_framework": manifest["active_model_framework"],
         "available_models": manifest["available_models"],
     }
 
