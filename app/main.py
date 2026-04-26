@@ -1,0 +1,48 @@
+from fastapi import FastAPI
+from pydantic import BaseModel, Field
+
+from app.service import ensure_model_ready, load_manifest, predict
+
+
+class PredictionRequest(BaseModel):
+    income_k: float = Field(ge=0.0)
+    debt_to_income: float = Field(ge=0.0, le=1.0)
+    credit_score: float = Field(ge=300.0, le=900.0)
+    tenure_months: float = Field(ge=0.0)
+    late_payments_12m: int = Field(ge=0, le=20)
+
+
+ensure_model_ready()
+
+app = FastAPI(
+    title="ML Training Serving Platform",
+    version="0.1.0",
+    description="Deterministic train-to-serve ML lifecycle demo with registry metadata and offline-online parity checks.",
+)
+
+
+@app.get("/")
+def root() -> dict[str, object]:
+    manifest = load_manifest()
+    return {
+        "project": "ml-training-serving-platform",
+        "model_version": manifest["model_version"],
+        "artifacts_ready": True,
+    }
+
+
+@app.get("/health")
+def health() -> dict[str, object]:
+    manifest = load_manifest()
+    return {"status": "ok", "model_version": manifest["model_version"]}
+
+
+@app.get("/model")
+def model_info() -> dict[str, str]:
+    return load_manifest()
+
+
+@app.post("/predict")
+def predict_route(request: PredictionRequest) -> dict[str, float | str]:
+    return predict(request.model_dump())
+
