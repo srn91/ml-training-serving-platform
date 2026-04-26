@@ -53,7 +53,6 @@ ml-training-serving-platform/
 ├── artifacts/
 ├── generated/
 ├── tests/
-└── PROJECT_CHECKLIST.md
 ```
 
 ## Run Steps
@@ -61,7 +60,7 @@ ml-training-serving-platform/
 ### Install Dependencies
 
 ```bash
-git clone git@github.com:srn91/ml-training-serving-platform.git
+git clone https://github.com/srn91/ml-training-serving-platform.git
 cd ml-training-serving-platform
 python3 -m pip install -r requirements.txt
 ```
