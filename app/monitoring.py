@@ -45,6 +45,28 @@ def _calibration_gap(bins: list[dict[str, float | int]]) -> float:
     )
 
 
+def _calibration_bins(
+    calibration: dict[str, object],
+    version: str,
+    metadata: dict[str, object],
+) -> list[dict[str, float | int]]:
+    models = calibration.get("models")
+    if isinstance(models, dict):
+        entry = models.get(version)
+        if isinstance(entry, dict):
+            bins = entry.get("bins")
+            if isinstance(bins, list):
+                return bins
+    role = metadata.get("role")
+    if isinstance(role, str):
+        legacy_entry = calibration.get(role)
+        if isinstance(legacy_entry, dict):
+            bins = legacy_entry.get("bins")
+            if isinstance(bins, list):
+                return bins
+    return []
+
+
 def build_monitoring_summary() -> dict[str, object]:
     manifest = load_manifest()
     dataset_rows = read_dataset(Path(str(manifest["dataset_file"])))
@@ -67,10 +89,12 @@ def build_monitoring_summary() -> dict[str, object]:
     for version, metadata in manifest["available_models"].items():
         model = load_model(version)
         probabilities = model.predict_proba([[float(row[name]) for name in FEATURE_NAMES] for row in recent_rows])[:, 1]
+        bins = _calibration_bins(calibration, version, metadata)
         models[version] = {
             "role": metadata["role"],
+            "framework": metadata["framework"],
             "mean_recent_probability": round(float(probabilities.mean()), 4),
-            "calibration_gap": _calibration_gap(calibration[metadata["role"]]["bins"]),
+            "calibration_gap": _calibration_gap(bins),
         }
 
     summary = {

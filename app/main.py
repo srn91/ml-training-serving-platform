@@ -50,6 +50,7 @@ def health() -> dict[str, object]:
         "status": "ok",
         "model_version": manifest["active_model_version"],
         "active_model_role": manifest["active_model_role"],
+        "active_model_framework": manifest["active_model_framework"],
     }
 
 
@@ -61,6 +62,7 @@ def model_info() -> dict[str, object]:
 @app.get("/models")
 def models() -> dict[str, object]:
     return available_models()
+
 
 @app.get("/monitoring")
 def monitoring() -> dict[str, object]:
