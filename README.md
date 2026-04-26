@@ -120,6 +120,14 @@ Useful endpoints:
 make verify
 ```
 
+## Hosted Deployment
+
+- Live URL: `https://ml-training-serving-platform.onrender.com`
+- Click first: [`/model`](https://ml-training-serving-platform.onrender.com/model)
+- Browser smoke: Render-hosted `/model` loaded in a real browser and returned the active artifact manifest for `model-v1`.
+- Render service config: Python web service on `main`, auto-deploy on commit, region `oregon`, plan `free`, build `pip install -r requirements.txt && python3 -m app.cli train`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, health check `/health`.
+- Render deploy command: `render deploys create srv-d7n658brjlhs73aaqqt0 --confirm`
+
 ## Validation
 
 The repo currently verifies:
