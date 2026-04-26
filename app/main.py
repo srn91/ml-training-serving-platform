@@ -3,7 +3,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from app.service import ensure_model_ready, load_manifest, predict, predict_many
+from app.monitoring import build_monitoring_summary
+from app.service import available_models, ensure_model_ready, load_manifest, predict, predict_many
 
 
 class PredictionRequest(BaseModel):
@@ -57,17 +58,26 @@ def model_info() -> dict[str, object]:
     return load_manifest()
 
 
+@app.get("/models")
+def models() -> dict[str, object]:
+    return available_models()
+
+@app.get("/monitoring")
+def monitoring() -> dict[str, object]:
+    return build_monitoring_summary()
+
+
 @app.post("/predict")
-def predict_route(request: PredictionRequest) -> dict[str, float | str]:
-    return predict(request.model_dump())
+def predict_route(request: PredictionRequest, version: str | None = None) -> dict[str, float | str]:
+    return predict(request.model_dump(), model_version=version)
 
 
 @app.post("/predict/batch")
-def predict_batch_route(request: BatchPredictionRequest) -> dict[str, object]:
+def predict_batch_route(request: BatchPredictionRequest, version: str | None = None) -> dict[str, object]:
     records = [record.model_dump() for record in request.records]
-    predictions = predict_many(records)
+    predictions = predict_many(records, model_version=version)
     return {
-        "model_version": load_manifest()["active_model_version"],
+        "model_version": predictions[0]["model_version"] if predictions else load_manifest()["active_model_version"],
         "records_scored": len(predictions),
         "predictions": predictions,
     }

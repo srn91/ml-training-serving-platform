@@ -1,4 +1,4 @@
-from app.config import COMPARISON_FILE, MANIFEST_FILE, MODEL_FILE, ROLLBACK_FILE
+from app.config import CALIBRATION_FILE, COMPARISON_FILE, DRIFT_BASELINE_FILE, MANIFEST_FILE, MODEL_FILE, MONITORING_SUMMARY_FILE, ROLLBACK_FILE
 from app.training import train_and_register
 from app.validation import validate_offline_online_parity
 
@@ -18,6 +18,8 @@ def test_training_metrics_are_strong_enough_for_demo() -> None:
     assert MODEL_FILE.exists()
     assert COMPARISON_FILE.exists()
     assert ROLLBACK_FILE.exists()
+    assert CALIBRATION_FILE.exists()
+    assert DRIFT_BASELINE_FILE.exists()
 
 
 def test_offline_online_parity_stays_exact_for_local_model() -> None:
@@ -25,3 +27,5 @@ def test_offline_online_parity_stays_exact_for_local_model() -> None:
 
     assert summary.samples_checked == 25
     assert summary.max_probability_delta <= 1e-6
+    assert "credit_score" in summary.monitoring_summary["feature_drift"]
+    assert MONITORING_SUMMARY_FILE.exists()

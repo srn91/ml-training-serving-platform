@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: ml-training-serving-platform
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+    repo: https://github.com/srn91/ml-training-serving-platform
+    autoDeploy: true
+    buildCommand: python3 -m pip install -r requirements.txt && python3 -m app.cli train
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.0
