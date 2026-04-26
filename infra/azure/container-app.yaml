@@ -1,0 +1,32 @@
+location: eastus
+name: ml-training-serving-platform
+type: Microsoft.App/containerApps
+properties:
+  managedEnvironmentId: /subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.App/managedEnvironments/<environment-name>
+  configuration:
+    ingress:
+      external: true
+      targetPort: 8000
+      transport: auto
+    registries:
+      - server: ghcr.io
+    activeRevisionsMode: Single
+  template:
+    containers:
+      - name: api
+        image: ghcr.io/srn91/ml-training-serving-platform:latest
+        probes:
+          - type: Liveness
+            httpGet:
+              path: /health
+              port: 8000
+          - type: Readiness
+            httpGet:
+              path: /health
+              port: 8000
+        resources:
+          cpu: 0.5
+          memory: 1Gi
+    scale:
+      minReplicas: 1
+      maxReplicas: 2

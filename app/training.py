@@ -5,19 +5,23 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import joblib
+import numpy as np
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.metrics import accuracy_score, brier_score_loss, roc_auc_score
 
 from app.config import (
+    CALIBRATION_FILE,
     CHALLENGER_MODEL_FILE,
     CHAMPION_MODEL_FILE,
     COMPARISON_FILE,
     DATASET_CSV,
+    DRIFT_BASELINE_FILE,
     MANIFEST_FILE,
     METRICS_FILE,
     MODEL_DIR,
     MODEL_FILE,
     MODEL_VERSION,
+    MONITORING_SUMMARY_FILE,
     ROLLBACK_FILE,
     SCHEMA_FILE,
 )
@@ -85,6 +89,56 @@ def _selection_score(candidate: dict[str, object]) -> tuple[float, float, float]
     )
 
 
+def _calibration_summary(probabilities: np.ndarray, labels: list[int], bins: int = 5) -> dict[str, object]:
+    edges = np.linspace(0.0, 1.0, bins + 1)
+    bucket_rows: list[dict[str, float | int]] = []
+    for start, end in zip(edges[:-1], edges[1:], strict=True):
+        if end == 1.0:
+            mask = (probabilities >= start) & (probabilities <= end)
+        else:
+            mask = (probabilities >= start) & (probabilities < end)
+        bucket_probs = probabilities[mask]
+        bucket_labels = [label for label, keep in zip(labels, mask, strict=True) if keep]
+        if len(bucket_probs) == 0:
+            bucket_rows.append(
+                {
+                    "bin_start": round(float(start), 2),
+                    "bin_end": round(float(end), 2),
+                    "count": 0,
+                    "mean_predicted_probability": 0.0,
+                    "observed_default_rate": 0.0,
+                }
+            )
+            continue
+        bucket_rows.append(
+            {
+                "bin_start": round(float(start), 2),
+                "bin_end": round(float(end), 2),
+                "count": int(len(bucket_probs)),
+                "mean_predicted_probability": round(float(bucket_probs.mean()), 4),
+                "observed_default_rate": round(float(sum(bucket_labels) / len(bucket_labels)), 4),
+            }
+        )
+    return {"bins": bucket_rows}
+
+
+def _feature_baseline(rows: list[dict[str, float | int]]) -> dict[str, object]:
+    baseline: dict[str, object] = {}
+    for feature_name in FEATURE_NAMES:
+        values = np.array([float(row[feature_name]) for row in rows], dtype=float)
+        baseline[feature_name] = {
+            "mean": round(float(values.mean()), 4),
+            "std": round(float(values.std()), 4),
+            "min": round(float(values.min()), 4),
+            "max": round(float(values.max()), 4),
+            "p10": round(float(np.quantile(values, 0.10)), 4),
+            "p50": round(float(np.quantile(values, 0.50)), 4),
+            "p90": round(float(np.quantile(values, 0.90)), 4),
+        }
+    baseline["default_rate"] = round(float(sum(int(row["defaulted"]) for row in rows) / len(rows)), 4)
+    return baseline
+
+
 def train_and_register() -> TrainingArtifacts:
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     rows = generate_rows()
@@ -134,6 +188,11 @@ def train_and_register() -> TrainingArtifacts:
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(joblib.load(selected["model_file"]), MODEL_FILE)
 
+    champion_model = joblib.load(champion["model_file"])
+    challenger_model = joblib.load(challenger["model_file"])
+    champion_probs = champion_model.predict_proba(x_test)[:, 1]
+    challenger_probs = challenger_model.predict_proba(x_test)[:, 1]
+
     comparison = {
         "registry_version": MODEL_VERSION,
         "champion": champion,
@@ -143,6 +202,26 @@ def train_and_register() -> TrainingArtifacts:
         "selection_reason": "higher holdout ROC AUC, then accuracy, then lower brier score",
     }
     COMPARISON_FILE.write_text(json.dumps(comparison, indent=2), encoding="utf-8")
+
+    calibration = {
+        "registry_version": MODEL_VERSION,
+        "champion": {
+            "model_version": champion["model_version"],
+            **_calibration_summary(champion_probs, y_test),
+        },
+        "challenger": {
+            "model_version": challenger["model_version"],
+            **_calibration_summary(challenger_probs, y_test),
+        },
+    }
+    CALIBRATION_FILE.write_text(json.dumps(calibration, indent=2), encoding="utf-8")
+
+    drift_baseline = {
+        "registry_version": MODEL_VERSION,
+        "train_rows": len(train_rows),
+        "features": _feature_baseline(train_rows),
+    }
+    DRIFT_BASELINE_FILE.write_text(json.dumps(drift_baseline, indent=2), encoding="utf-8")
 
     rollback = {
         "registry_version": MODEL_VERSION,
@@ -178,8 +257,21 @@ def train_and_register() -> TrainingArtifacts:
                 "active_model_file": str(MODEL_FILE),
                 "comparison_file": str(COMPARISON_FILE),
                 "rollback_file": str(ROLLBACK_FILE),
+                "calibration_file": str(CALIBRATION_FILE),
+                "drift_baseline_file": str(DRIFT_BASELINE_FILE),
+                "monitoring_summary_file": str(MONITORING_SUMMARY_FILE),
                 "champion": champion,
                 "challenger": challenger,
+                "available_models": {
+                    champion["model_version"]: {
+                        "role": champion["role"],
+                        "model_file": str(CHAMPION_MODEL_FILE),
+                    },
+                    challenger["model_version"]: {
+                        "role": challenger["role"],
+                        "model_file": str(CHALLENGER_MODEL_FILE),
+                    },
+                },
                 "metrics_file": str(METRICS_FILE),
                 "schema_file": str(SCHEMA_FILE),
                 "dataset_file": str(DATASET_CSV),

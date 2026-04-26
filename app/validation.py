@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.dataset import FEATURE_NAMES, read_dataset
+from app.monitoring import build_monitoring_summary
 from app.service import load_manifest, load_model, predict, reload_model
 
 
@@ -12,6 +13,7 @@ class ValidationSummary:
     max_probability_delta: float
     samples_checked: int
     model_version: str
+    monitoring_summary: dict[str, object]
 
 
 def validate_offline_online_parity() -> ValidationSummary:
@@ -34,4 +36,5 @@ def validate_offline_online_parity() -> ValidationSummary:
         max_probability_delta=round(max_delta, 8),
         samples_checked=len(holdout),
         model_version=str(manifest["active_model_version"]),
+        monitoring_summary=build_monitoring_summary(),
     )

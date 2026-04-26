@@ -56,6 +56,7 @@ def main() -> None:
                     "model_version": summary.model_version,
                     "samples_checked": summary.samples_checked,
                     "max_probability_delta": summary.max_probability_delta,
+                    "monitoring": summary.monitoring_summary,
                 }
             },
             indent=2,
