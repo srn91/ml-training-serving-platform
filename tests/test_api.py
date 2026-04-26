@@ -26,7 +26,7 @@ def test_predict_endpoint_returns_model_version_and_probability() -> None:
     payload = response.json()
 
     assert response.status_code == 200
-    assert payload["model_version"] == "model-v1"
+    assert payload["model_version"] in {"model-v1-champion", "model-v1-challenger"}
     assert 0.0 <= payload["default_probability"] <= 1.0
 
 
@@ -37,9 +37,14 @@ def test_health_and_model_endpoints_report_registered_version() -> None:
     model_response = client.get("/model")
 
     assert health_response.status_code == 200
-    assert health_response.json()["model_version"] == "model-v1"
+    assert health_response.json()["active_model_role"] in {"champion", "challenger"}
     assert model_response.status_code == 200
-    assert model_response.json()["model_version"] == "model-v1"
+    model_payload = model_response.json()
+    assert model_payload["registry_version"] == "model-v1"
+    assert model_payload["active_model_role"] in {"champion", "challenger"}
+    assert model_payload["active_model_version"] in {"model-v1-champion", "model-v1-challenger"}
+    assert "comparison_file" in model_payload
+    assert "rollback_file" in model_payload
 
 
 def test_batch_predict_endpoint_scores_multiple_records() -> None:
@@ -69,7 +74,7 @@ def test_batch_predict_endpoint_scores_multiple_records() -> None:
 
     body = response.json()
     assert response.status_code == 200
-    assert body["model_version"] == "model-v1"
+    assert body["model_version"] in {"model-v1-champion", "model-v1-challenger"}
     assert body["records_scored"] == 2
     assert len(body["predictions"]) == 2
     assert all(0.0 <= row["default_probability"] <= 1.0 for row in body["predictions"])

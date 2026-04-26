@@ -33,5 +33,5 @@ def validate_offline_online_parity() -> ValidationSummary:
     return ValidationSummary(
         max_probability_delta=round(max_delta, 8),
         samples_checked=len(holdout),
-        model_version=str(manifest["model_version"]),
+        model_version=str(manifest["active_model_version"]),
     )

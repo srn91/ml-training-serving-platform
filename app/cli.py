@@ -29,7 +29,7 @@ def main() -> None:
 
     if args.command == "train":
         artifacts = train_and_register()
-        print(json.dumps({"metrics": artifacts.metrics}, indent=2))
+        print(json.dumps({"training": artifacts.metrics}, indent=2))
         return
 
     if args.command == "batch-score":
