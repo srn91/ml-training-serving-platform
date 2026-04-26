@@ -112,7 +112,27 @@ Useful endpoints:
 
 - `http://127.0.0.1:8000/health`
 - `http://127.0.0.1:8000/model`
+- `http://127.0.0.1:8000/predict`
+- `http://127.0.0.1:8000/predict/batch`
 - `http://127.0.0.1:8000/docs`
+
+### Batch Score Registered Holdout Records
+
+```bash
+make train
+python3 -m app.cli batch-score --limit 3
+```
+
+You can also score a custom JSON payload:
+
+```bash
+python3 -m app.cli batch-score --input path/to/batch_records.json
+```
+
+Accepted input shapes:
+
+- a top-level JSON array of records
+- or `{"records": [...]}`
 
 ### Full Quality Gate
 
@@ -136,6 +156,7 @@ The repo currently verifies:
 - the trained model clears a reasonable local demo quality bar
 - the FastAPI serving surface returns the registered model version and a bounded probability
 - offline direct probabilities match the served probabilities on a holdout sample
+- batch scoring uses the same registered artifact as the single-record API path
 
 The public story should stay precise:
 
@@ -169,13 +190,14 @@ The current V1 supports:
 - artifact registration with metrics, schema, and manifest metadata
 - FastAPI inference serving from the latest registered model
 - offline-to-online parity validation for serving correctness
+- batch scoring through both `POST /predict/batch` and `python3 -m app.cli batch-score`
 
 ## Next Steps
 
 Realistic next follow-up work:
 
 1. add champion-challenger model comparison and rollback metadata
-2. expose batch scoring and shadow validation endpoints
+2. add shadow validation outputs that compare current and candidate models on the same batch
 3. add drift and calibration monitoring outputs
 4. support multiple model versions in the service with explicit routing
 5. replace synthetic data with warehouse-backed feature snapshots

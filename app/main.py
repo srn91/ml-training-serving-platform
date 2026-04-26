@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from app.service import ensure_model_ready, load_manifest, predict
+from app.service import ensure_model_ready, load_manifest, predict, predict_many
 
 
 class PredictionRequest(BaseModel):
@@ -12,6 +12,10 @@ class PredictionRequest(BaseModel):
     credit_score: float = Field(ge=300.0, le=900.0)
     tenure_months: float = Field(ge=0.0)
     late_payments_12m: int = Field(ge=0, le=20)
+
+
+class BatchPredictionRequest(BaseModel):
+    records: list[PredictionRequest] = Field(min_length=1, max_length=100)
 
 
 @asynccontextmanager
@@ -52,3 +56,14 @@ def model_info() -> dict[str, str]:
 @app.post("/predict")
 def predict_route(request: PredictionRequest) -> dict[str, float | str]:
     return predict(request.model_dump())
+
+
+@app.post("/predict/batch")
+def predict_batch_route(request: BatchPredictionRequest) -> dict[str, object]:
+    records = [record.model_dump() for record in request.records]
+    predictions = predict_many(records)
+    return {
+        "model_version": load_manifest()["model_version"],
+        "records_scored": len(predictions),
+        "predictions": predictions,
+    }

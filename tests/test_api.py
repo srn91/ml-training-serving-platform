@@ -42,6 +42,39 @@ def test_health_and_model_endpoints_report_registered_version() -> None:
     assert model_response.json()["model_version"] == "model-v1"
 
 
+def test_batch_predict_endpoint_scores_multiple_records() -> None:
+    client = _client()
+
+    response = client.post(
+        "/predict/batch",
+        json={
+            "records": [
+                {
+                    "income_k": 72.0,
+                    "debt_to_income": 0.31,
+                    "credit_score": 690.0,
+                    "tenure_months": 36.0,
+                    "late_payments_12m": 1,
+                },
+                {
+                    "income_k": 48.0,
+                    "debt_to_income": 0.52,
+                    "credit_score": 640.0,
+                    "tenure_months": 12.0,
+                    "late_payments_12m": 3,
+                },
+            ]
+        },
+    )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["model_version"] == "model-v1"
+    assert body["records_scored"] == 2
+    assert len(body["predictions"]) == 2
+    assert all(0.0 <= row["default_probability"] <= 1.0 for row in body["predictions"])
+
+
 def test_predict_rejects_invalid_payload() -> None:
     client = _client()
 
