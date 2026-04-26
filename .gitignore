@@ -4,4 +4,4 @@ __pycache__/
 .ruff_cache/
 generated/
 artifacts/
-
+PROJECT_CHECKLIST.md

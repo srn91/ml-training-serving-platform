@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
-from app.dataset import FEATURE_NAMES, generate_rows
-from app.service import predict, reload_model
-from app.training import train_and_register
+from app.dataset import FEATURE_NAMES, read_dataset
+from app.service import load_manifest, load_model, predict, reload_model
 
 
 @dataclass(frozen=True)
@@ -15,12 +15,10 @@ class ValidationSummary:
 
 
 def validate_offline_online_parity() -> ValidationSummary:
-    artifacts = train_and_register()
     reload_model()
-    rows = generate_rows()
+    manifest = load_manifest()
+    rows = read_dataset(destination=Path(manifest["dataset_file"]))
     holdout = rows[-25:]
-
-    from app.service import load_model
 
     model = load_model()
     max_delta = 0.0
@@ -35,6 +33,5 @@ def validate_offline_online_parity() -> ValidationSummary:
     return ValidationSummary(
         max_probability_delta=round(max_delta, 8),
         samples_checked=len(holdout),
-        model_version=str(artifacts.metrics["model_version"]),
+        model_version=str(manifest["model_version"]),
     )
-

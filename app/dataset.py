@@ -59,3 +59,21 @@ def write_dataset(rows: list[dict[str, float | int]], destination: Path) -> None
         )
         writer.writeheader()
         writer.writerows(rows)
+
+
+def read_dataset(destination: Path) -> list[dict[str, float | int]]:
+    with destination.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        parsed_rows: list[dict[str, float | int]] = []
+        for row in reader:
+            parsed_rows.append(
+                {
+                    "income_k": float(row["income_k"]),
+                    "debt_to_income": float(row["debt_to_income"]),
+                    "credit_score": float(row["credit_score"]),
+                    "tenure_months": float(row["tenure_months"]),
+                    "late_payments_12m": int(row["late_payments_12m"]),
+                    "defaulted": int(row["defaulted"]),
+                }
+            )
+    return parsed_rows

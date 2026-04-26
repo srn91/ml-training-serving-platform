@@ -11,7 +11,7 @@ Many ML demos stop at model accuracy. Real ML engineering work requires a full l
 The V1 implementation is intentionally compact but complete:
 
 - a deterministic synthetic credit-risk dataset is generated locally
-- training fits a scikit-learn logistic-regression pipeline with standardization
+- training fits a deterministic tree-ensemble baseline on the generated dataset
 - the registry writes model artifacts, feature schema, metrics, and a manifest under a versioned artifact directory
 - FastAPI serves predictions from the latest registered model
 - a parity validator compares direct offline probabilities to served probabilities on a holdout slice
@@ -61,7 +61,8 @@ ml-training-serving-platform/
 ### Install Dependencies
 
 ```bash
-cd /Users/sathwikraonadipelli/Desktop/RESUMES/projects/ml-training-serving-platform
+git clone git@github.com:srn91/ml-training-serving-platform.git
+cd ml-training-serving-platform
 python3 -m pip install -r requirements.txt
 ```
 

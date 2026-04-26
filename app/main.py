@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
@@ -12,12 +14,17 @@ class PredictionRequest(BaseModel):
     late_payments_12m: int = Field(ge=0, le=20)
 
 
-ensure_model_ready()
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    ensure_model_ready()
+    yield
+
 
 app = FastAPI(
     title="ML Training Serving Platform",
     version="0.1.0",
     description="Deterministic train-to-serve ML lifecycle demo with registry metadata and offline-online parity checks.",
+    lifespan=lifespan,
 )
 
 
@@ -45,4 +52,3 @@ def model_info() -> dict[str, str]:
 @app.post("/predict")
 def predict_route(request: PredictionRequest) -> dict[str, float | str]:
     return predict(request.model_dump())
-

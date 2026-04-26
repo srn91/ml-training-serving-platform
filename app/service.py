@@ -11,9 +11,9 @@ from app.dataset import FEATURE_NAMES
 
 def ensure_model_ready() -> None:
     if not MANIFEST_FILE.exists():
-        from app.training import train_and_register
-
-        train_and_register()
+        raise FileNotFoundError(
+            "registered model artifacts not found; run `make train` before serving or validating"
+        )
 
 
 @lru_cache(maxsize=1)
@@ -43,4 +43,3 @@ def predict(features: dict[str, float]) -> dict[str, float | str]:
         "default_probability": round(probability, 6),
         "prediction": label,
     }
-
