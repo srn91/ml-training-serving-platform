@@ -1,10 +1,10 @@
 # ml-training-serving-platform
 
-A local-first ML lifecycle repo that trains a credit-risk classifier, registers model artifacts and schema metadata, serves predictions through FastAPI, and validates offline-to-online prediction parity before publish.
+An end-to-end ML lifecycle platform that trains a credit-risk classifier, registers versioned artifacts and schema metadata, serves predictions through FastAPI, and validates offline-to-online prediction parity before release.
 
 ## Problem
 
-Many ML demos stop at model accuracy. Real ML engineering work requires a full lifecycle: reproducible training, artifact registration, version-aware serving, and confidence that the numbers used offline match what the inference API serves online. This repo focuses on that train-to-serve boundary.
+Many ML demos stop at model accuracy. Real ML engineering work requires reproducible training, versioned model packaging, and confidence that the numbers validated offline match what the inference API serves online. This repo focuses on that train-to-serve boundary so model releases stay debuggable, repeatable, and safe to ship.
 
 ## Architecture
 
@@ -15,6 +15,8 @@ The V1 implementation is intentionally compact but complete:
 - the registry writes model artifacts, feature schema, metrics, and a manifest under a versioned artifact directory
 - FastAPI serves predictions from the latest registered model
 - a parity validator compares direct offline probabilities to served probabilities on a holdout slice
+
+In practice, the repo is split into three lifecycle stages: deterministic training data generation, artifact-backed model registration, and serving-time validation that proves the API matches the offline benchmark.
 
 ## Training, Serving, Validation
 
