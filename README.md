@@ -1,6 +1,6 @@
 # ml-training-serving-platform
 
-An end-to-end ML lifecycle platform that trains a credit-risk classifier, registers versioned artifacts and schema metadata, serves predictions through FastAPI, and validates offline-to-online prediction parity before release.
+An end-to-end ML lifecycle platform that trains a credit-risk classifier, compares champion and challenger models, registers rollback metadata and schema artifacts, serves predictions through FastAPI, and validates offline-to-online prediction parity before release.
 
 ## Problem
 
@@ -8,41 +8,43 @@ Many ML demos stop at model accuracy. Real ML engineering work requires reproduc
 
 ## Architecture
 
-The V1 implementation is intentionally compact but complete:
+The current implementation is intentionally compact but complete:
 
 - a deterministic synthetic credit-risk dataset is generated locally
-- training fits a deterministic tree-ensemble baseline on the generated dataset
-- the registry writes model artifacts, feature schema, metrics, and a manifest under a versioned artifact directory
-- FastAPI serves predictions from the latest registered model
+- training fits a deterministic champion/challenger pair on the generated dataset
+- the registry writes active model, champion, challenger, feature schema, metrics, comparison, rollback, and manifest artifacts under a versioned artifact directory
+- FastAPI serves predictions from the selected active model
 - a parity validator compares direct offline probabilities to served probabilities on a holdout slice
 
-In practice, the repo is split into three lifecycle stages: deterministic training data generation, artifact-backed model registration, and serving-time validation that proves the API matches the offline benchmark.
+In practice, the repo is split into three lifecycle stages: deterministic training data generation, artifact-backed champion/challenger registration, and serving-time validation that proves the API matches the offline benchmark.
 
 ## Training, Serving, Validation
 
 This repo is split into three separate code paths so the lifecycle is easy to inspect:
 
 1. `app/dataset.py` generates and reloads the synthetic training data.
-2. `app/training.py` fits the model and writes the registry package.
-3. `app/service.py` loads the saved manifest and serves predictions from the latest artifact.
+2. `app/training.py` fits both candidate models, selects the active model, and writes the comparison and rollback bundle.
+3. `app/service.py` loads the saved manifest and serves predictions from the active artifact.
 4. `app/validation.py` checks that offline probabilities and online probabilities stay aligned.
 5. `app/main.py` exposes the FastAPI surface.
-6. `app/cli.py` provides explicit `train` and `validate` commands.
+6. `app/cli.py` provides explicit `train`, `validate`, and `batch-score` commands.
 
-That separation matters. This is not an "everything in one file" demo; it is a training artifact, a serving layer, and a parity check stitched together with a small, inspectable contract.
+That separation matters. This is not an "everything in one file" demo; it is a training artifact, a serving layer, a rollback record, and a parity check stitched together with a small, inspectable contract.
 
 ```mermaid
 flowchart LR
     A["Synthetic training dataset"] --> B["Training pipeline"]
-    B --> C["model.joblib"]
+    B --> C["active_model.joblib"]
     B --> D["metrics.json"]
-    B --> E["feature_schema.json"]
-    B --> F["manifest.json"]
-    F --> G["FastAPI inference service"]
-    C --> G
-    A --> H["Offline / online parity validation"]
-    G --> H
-    H --> I["validation summary"]
+    B --> E["comparison.json"]
+    B --> F["rollback.json"]
+    B --> G["feature_schema.json"]
+    B --> H["manifest.json"]
+    H --> I["FastAPI inference service"]
+    C --> I
+    A --> J["Offline / online parity validation"]
+    I --> J
+    J --> K["validation summary"]
 ```
 
 ## Tradeoffs
@@ -89,8 +91,12 @@ make train
 That produces:
 
 - `generated/credit_risk_dataset.csv`
-- `artifacts/model-v1/model.joblib`
+- `artifacts/model-v1/active_model.joblib`
+- `artifacts/model-v1/champion_model.joblib`
+- `artifacts/model-v1/challenger_model.joblib`
 - `artifacts/model-v1/metrics.json`
+- `artifacts/model-v1/comparison.json`
+- `artifacts/model-v1/rollback.json`
 - `artifacts/model-v1/feature_schema.json`
 - `artifacts/model-v1/manifest.json`
 
@@ -146,7 +152,7 @@ make verify
 
 - Live URL: `https://ml-training-serving-platform.onrender.com`
 - Click first: [`/model`](https://ml-training-serving-platform.onrender.com/model)
-- Browser smoke: Render-hosted `/model` loaded in a real browser and returned the active artifact manifest for `model-v1`.
+- Browser smoke: Render-hosted `/model` loaded in a real browser and returned the active artifact manifest, including the champion/challenger comparison and rollback metadata.
 - Render service config: Python web service on `main`, auto-deploy on commit, region `oregon`, plan `free`, build `pip install -r requirements.txt && python3 -m app.cli train`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, health check `/health`.
 - Render deploy command: `render deploys create srv-d7n658brjlhs73aaqqt0 --confirm`
 
@@ -154,27 +160,25 @@ make verify
 
 The repo currently verifies:
 
-- the training pipeline writes a versioned model registry package
-- the trained model clears a reasonable local demo quality bar
-- the FastAPI serving surface returns the registered model version and a bounded probability
+- the training pipeline writes champion, challenger, comparison, rollback, schema, metrics, and manifest artifacts
+- the selected active model clears a reasonable local demo quality bar
+- the FastAPI serving surface returns the active model version and a bounded probability
 - offline direct probabilities match the served probabilities on a holdout sample
 - batch scoring uses the same registered artifact as the single-record API path
 
 The public story should stay precise:
 
 - training and serving are separate code paths
-- the service always loads from the registered artifact package
+- the service always loads from the active artifact package
 - validation compares offline and online probabilities instead of assuming they match
-- the manifest, schema, and metrics files make the artifact bundle self-describing
+- the manifest, schema, comparison, rollback, and metrics files make the artifact bundle self-describing
 
-Expected local validation snapshot:
+Current validation shape:
 
 - training rows: `1920`
 - test rows: `480`
-- accuracy: `0.7896`
-- ROC AUC: `0.8345`
-- brier score: `0.1552`
-- max offline-online probability delta: `4.8e-07`
+- the selected active model is recorded in the manifest and comparison file
+- max offline-online probability delta stays at or below `1e-6`
 
 Local quality gates:
 
@@ -185,21 +189,20 @@ Local quality gates:
 
 ## Current Capabilities
 
-The current V1 supports:
+The current implementation supports:
 
 - deterministic training dataset generation
-- scikit-learn training with reproducible model versioning
-- artifact registration with metrics, schema, and manifest metadata
-- FastAPI inference serving from the latest registered model
+- scikit-learn champion/challenger training with reproducible model versioning
+- artifact registration with metrics, schema, comparison, rollback, and manifest metadata
+- FastAPI inference serving from the selected active model
 - offline-to-online parity validation for serving correctness
 - batch scoring through both `POST /predict/batch` and `python3 -m app.cli batch-score`
 
-## Future Expansion
+## Next Steps
 
 Possible follow-on work outside the current shipped scope:
 
-1. add champion-challenger model comparison and rollback metadata
-2. add shadow validation outputs that compare current and candidate models on the same batch
-3. add drift and calibration monitoring outputs
-4. support multiple model versions in the service with explicit routing
-5. replace synthetic data with warehouse-backed feature snapshots
+1. add shadow validation outputs that compare current and candidate models on the same batch
+2. add drift and calibration monitoring outputs
+3. support multiple model versions in the service with explicit routing
+4. replace synthetic data with warehouse-backed feature snapshots

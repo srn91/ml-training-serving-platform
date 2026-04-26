@@ -37,7 +37,7 @@ def root() -> dict[str, object]:
     manifest = load_manifest()
     return {
         "project": "ml-training-serving-platform",
-        "model_version": manifest["model_version"],
+        "model_version": manifest["active_model_version"],
         "artifacts_ready": True,
     }
 
@@ -45,11 +45,15 @@ def root() -> dict[str, object]:
 @app.get("/health")
 def health() -> dict[str, object]:
     manifest = load_manifest()
-    return {"status": "ok", "model_version": manifest["model_version"]}
+    return {
+        "status": "ok",
+        "model_version": manifest["active_model_version"],
+        "active_model_role": manifest["active_model_role"],
+    }
 
 
 @app.get("/model")
-def model_info() -> dict[str, str]:
+def model_info() -> dict[str, object]:
     return load_manifest()
 
 
@@ -63,7 +67,7 @@ def predict_batch_route(request: BatchPredictionRequest) -> dict[str, object]:
     records = [record.model_dump() for record in request.records]
     predictions = predict_many(records)
     return {
-        "model_version": load_manifest()["model_version"],
+        "model_version": load_manifest()["active_model_version"],
         "records_scored": len(predictions),
         "predictions": predictions,
     }

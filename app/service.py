@@ -18,7 +18,7 @@ def ensure_model_ready() -> None:
 
 
 @lru_cache(maxsize=1)
-def load_manifest() -> dict[str, str]:
+def load_manifest() -> dict[str, object]:
     ensure_model_ready()
     return json.loads(MANIFEST_FILE.read_text(encoding="utf-8"))
 
@@ -26,7 +26,7 @@ def load_manifest() -> dict[str, str]:
 @lru_cache(maxsize=1)
 def load_model():
     manifest = load_manifest()
-    return joblib.load(manifest["model_file"])
+    return joblib.load(manifest["active_model_file"])
 
 
 def reload_model() -> None:
@@ -37,7 +37,7 @@ def reload_model() -> None:
 def _prediction_payload(probability: float) -> dict[str, float | str]:
     label = "default_risk_high" if probability >= 0.5 else "default_risk_low"
     return {
-        "model_version": load_manifest()["model_version"],
+        "model_version": load_manifest()["active_model_version"],
         "default_probability": round(probability, 6),
         "prediction": label,
     }
