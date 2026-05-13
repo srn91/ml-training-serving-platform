@@ -2,6 +2,23 @@
 
 An end-to-end ML lifecycle platform that trains a credit-risk classifier with both scikit-learn baselines and a compact PyTorch model, registers versioned artifacts, serves multi-version predictions through FastAPI, and validates offline-to-online prediction parity before release.
 
+## Proof Snapshot
+
+| Signal | Current evidence |
+|---|---|
+| Model lifecycle | `make train` writes an artifact bundle with active, champion, challenger, and PyTorch model files plus metrics, comparison, rollback, schema, calibration, drift baseline, monitoring summary, and manifest metadata. |
+| Multi-version serving | FastAPI serves the active model by default and accepts an explicit `version` parameter for registered model variants, including the PyTorch artifact. |
+| Offline-online parity | `make validate` compares direct offline probabilities to served probabilities and expects max probability delta at or below `1e-6`. |
+| Monitoring readiness | `/monitoring` and artifact summaries expose drift and calibration gaps from the latest registered evaluation slice. |
+| Deployment proof | Render deployment loads the trained artifact package at startup and exposes `/model`, `/models`, `/predict`, `/predict/batch`, and `/monitoring`. |
+
+## What This Proves
+
+- Model training, model packaging, serving, validation, and rollback metadata are handled as one lifecycle.
+- The system is not just a notebook: it has a registry contract, endpoint contract, parity gate, and operational metadata.
+- Classical ML and PyTorch models share the same serving and validation path.
+- The repo maps directly to MLOps Engineer, ML Platform Engineer, Model Serving Engineer, and AI Platform roles.
+
 ## Problem
 
 Many ML demos stop at model accuracy. Real ML engineering work requires reproducible training, versioned model packaging, and confidence that the numbers validated offline match what the inference API serves online. This repo focuses on that train-to-serve boundary so model releases stay debuggable, repeatable, and safe to ship.
