@@ -2,9 +2,9 @@
 
 An end-to-end ML lifecycle platform that trains a credit-risk classifier with both scikit-learn baselines and a compact PyTorch model, registers versioned artifacts, serves multi-version predictions through FastAPI, and validates offline-to-online prediction parity before release.
 
-## Proof Snapshot
+## Results
 
-| Signal | Current evidence |
+| Area | Details |
 |---|---|
 | Model lifecycle | `make train` writes an artifact bundle with active, champion, challenger, and PyTorch model files plus metrics, comparison, rollback, schema, calibration, drift baseline, monitoring summary, and manifest metadata. |
 | Multi-version serving | FastAPI serves the active model by default and accepts an explicit `version` parameter for registered model variants, including the PyTorch artifact. |
@@ -12,7 +12,7 @@ An end-to-end ML lifecycle platform that trains a credit-risk classifier with bo
 | Monitoring readiness | `/monitoring` and artifact summaries expose drift and calibration gaps from the latest registered evaluation slice. |
 | Deployment proof | Render deployment loads the trained artifact package at startup and exposes `/model`, `/models`, `/predict`, `/predict/batch`, and `/monitoring`. |
 
-## What This Proves
+## Overview
 
 - Model training, model packaging, serving, validation, and rollback metadata are handled as one lifecycle.
 - The system is not just a notebook: it has a registry contract, endpoint contract, parity gate, and operational metadata.
