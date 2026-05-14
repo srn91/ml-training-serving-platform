@@ -186,7 +186,8 @@ make verify
 
 ## Hosted Deployment
 
-- Live API: [`/model`](https://ml-training-serving-platform.onrender.com/model)
+- Live demo: [ml-training-serving-platform.onrender.com](https://ml-training-serving-platform.onrender.com)
+- Sample API: [`/model`](https://ml-training-serving-platform.onrender.com/model)
 - Browser smoke: Render-hosted `/model` loaded in a real browser and returned the active artifact manifest, including the champion/challenger comparison and rollback metadata.
 - Render service config: Python web service on `main`, auto-deploy on commit, region `oregon`, plan `free`, build `pip install -r requirements.txt && python3 -m app.cli train`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, health check `/health`.
 - Render deploy command: `render deploys create srv-d7n658brjlhs73aaqqt0 --confirm`
