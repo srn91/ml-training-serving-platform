@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from app.monitoring import build_monitoring_summary
@@ -33,14 +34,27 @@ app = FastAPI(
 )
 
 
-@app.get("/")
-def root() -> dict[str, object]:
+@app.get("/", response_class=HTMLResponse)
+def root() -> str:
     manifest = load_manifest()
-    return {
-        "project": "ml-training-serving-platform",
-        "model_version": manifest["active_model_version"],
-        "artifacts_ready": True,
-    }
+    model_version = manifest["active_model_version"]
+    return f"""<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML Training Serving Platform</title>
+<style>body{{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;max-width:860px;margin:48px auto;padding:0 24px;line-height:1.5;color:#111}}a{{color:#0645ad}}</style></head>
+<body>
+<h1>ML Training Serving Platform</h1>
+<p>Train-to-serve workflow with versioned model artifacts, active-model metadata, monitoring output, and prediction APIs.</p>
+<ul><li>Active model version: {model_version}</li><li>Artifacts ready: yes</li></ul>
+<h2>Open endpoints</h2>
+<ul>
+<li><a href="/model">Active model manifest</a></li>
+<li><a href="/models">Available models</a></li>
+<li><a href="/monitoring">Monitoring summary</a></li>
+<li><a href="/docs">API docs</a></li>
+</ul>
+</body></html>"""
 
 
 @app.get("/health")
