@@ -2,6 +2,9 @@
 
 An end-to-end ML lifecycle platform that trains a credit-risk classifier with both scikit-learn baselines and a compact PyTorch model, registers versioned artifacts, serves multi-version predictions through FastAPI, and validates offline-to-online prediction parity before release.
 
+**System type:** Production-style engineering system  
+**System brief:** [docs/system-brief.md](docs/system-brief.md)
+
 ## Results
 
 | Area | Details |
